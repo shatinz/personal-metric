@@ -1,0 +1,5 @@
+aw-client
+pandas
+pywin32
+sentence-transformers
+numpy
