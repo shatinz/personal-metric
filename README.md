@@ -14,7 +14,9 @@ Using vector semantics, natural language processing (NLP), density-based cluster
 
 ### 1. Multi-Source Ingestion & Sync
 *   **Google Docs Integration:** Securely syncs diary entries from a specified Google Doc, extracting textual content along with inline custom metrics (Mood, Energy, Focus, Location).
-*   **Microsoft OneNote Integration:** Automates local Windows COM interfaces (`pywin32`) to extract entries directly from your `Personal notes -> dailynotes` section.
+*   **Microsoft OneNote Integration:** *(Currently Non-Functional)* Legacy automation of local Windows COM interfaces (`pywin32`) to extract entries directly from your `Personal notes -> dailynotes` section.
+    > [!WARNING]
+    > **OneNote Ingestion Status: Broken / Disabled.** Live automated syncing from local OneNote COM is currently non-functional. The pipeline's active syncing is fully routed to Google Docs. Historical OneNote data can still be imported using exported text dumps.
 *   **ActivityWatch (AW) Sync:** Queries your local ActivityWatch server to fetch total active screen-time and top application usage, correlating them with daily diaries.
 
 ### 2. Multi-Dimensional NLP Pipeline
@@ -138,6 +140,14 @@ streamlit run dashboard.py
 - [ ] **Activity-to-Flow State Mapping:** Deeply correlate specific IDEs/code editors usage with high-focus diaries to isolate physical variables that trigger creative flow.
 - [ ] **Offline LLM Integration:** Integrate local Ollama / Llama 3 models to provide full, local, offline psychoanalytic insights without transmitting personal thoughts to the cloud.
 - [ ] **Physiological Data Overlay:** Synchronize wearable device data (Garmin/Fitbit/Apple Health) to overlay sleep quality, HRV (Heart Rate Variability), and daily physical strain onto cognitive metrics.
+
+---
+
+## ⚠️ Known Incompatibilities & Troubleshooting
+
+*   **Microsoft OneNote Ingestion:** Live COM automation via `pywin32` is currently disabled and non-functional. If you have historical OneNote diary data, export it to a plain text file, normalize it, and import it using the `migrate_from_txt.py` script. The active live pipeline is configured to use Google Docs.
+*   **Google Antigravity SDK & Protobuf Versioning:** When running on newer Python runtimes (e.g., Python 3.14), you may encounter a Protobuf edition validation error (e.g., `Edition UNKNOWN is later than the maximum edition 2023`). If this occurs, the script automatically catches the exception and falls back to a rule-based heuristic evaluation report without crashing.
+*   **ActivityWatch Connection:** The pipeline attempts to connect to ActivityWatch running locally at `http://localhost:5600`. If ActivityWatch is not installed or running, the pipeline will log a warning and proceed without screen-time metrics, leaving those columns null.
 
 ---
 
