@@ -4,7 +4,7 @@
   <img src="personal_metric_logo.png" alt="Personal Metric Logo" width="300"/>
 </p>
 
-> **Personal Metric** is an advanced, automated pipeline that acts as a cognitive mirror. It transforms raw, qualitative diary narratives (from Google Docs or Microsoft OneNote) and quantitative screen-time metrics (from ActivityWatch) into deep psychological, behavioral, and linguistic insights. 
+> **Personal Metric** is an advanced, automated pipeline that acts as a cognitive mirror. It transforms raw, qualitative diary narratives (from Google Docs or Microsoft OneNote) and quantitative screen-time metrics (from [ActivityWatch](https://github.com/ActivityWatch/activitywatch)) into deep psychological, behavioral, and linguistic insights. 
 
 Using vector semantics, natural language processing (NLP), density-based clustering, and automated AI evaluation, this project tracks your mental state, writing style, emotional diversity, and digital habits over time. It presents these insights in a stunning, glassmorphic, interactive Streamlit dashboard.
 
@@ -17,7 +17,7 @@ Using vector semantics, natural language processing (NLP), density-based cluster
 *   **Microsoft OneNote Integration:** *(Currently Non-Functional)* Legacy automation of local Windows COM interfaces (`pywin32`) to extract entries directly from your `Personal notes -> dailynotes` section.
     > [!WARNING]
     > **OneNote Ingestion Status: Broken / Disabled.** Live automated syncing from local OneNote COM is currently non-functional. The pipeline's active syncing is fully routed to Google Docs. Historical OneNote data can still be imported using exported text dumps.
-*   **ActivityWatch (AW) Sync:** Queries your local ActivityWatch server to fetch total active screen-time and top application usage, correlating them with daily diaries.
+*   **ActivityWatch (AW) Sync:** Queries your local [ActivityWatch](https://github.com/ActivityWatch/activitywatch) server to fetch total active screen-time and top application usage, correlating them with daily diaries.
 
 ### 2. Multi-Dimensional NLP Pipeline
 *   **Lexical & Style Analysis:** Measures word counts, vocabulary richness via Type-Token Ratio (TTR), average sentence length, and structural variability.
@@ -78,7 +78,7 @@ graph TD
 
 ### 1. Prerequisites
 *   **Python:** 3.10 to 3.12 (recommended).
-*   **ActivityWatch:** Ensure [ActivityWatch](https://activitywatch.net/) is installed and running locally.
+*   **ActivityWatch:** Ensure [ActivityWatch](https://activitywatch.net/) ([GitHub repository](https://github.com/ActivityWatch/activitywatch)) is installed and running locally.
 *   **Microsoft OneNote (Optional):** If using OneNote extraction, ensure OneNote desktop is open and running in the same user session.
 
 ### 2. Clone and Install Dependencies
@@ -147,7 +147,7 @@ streamlit run dashboard.py
 
 *   **Microsoft OneNote Ingestion:** Live COM automation via `pywin32` is currently disabled and non-functional. If you have historical OneNote diary data, export it to a plain text file, normalize it, and import it using the `migrate_from_txt.py` script. The active live pipeline is configured to use Google Docs.
 *   **Google Antigravity SDK & Protobuf Versioning:** When running on newer Python runtimes (e.g., Python 3.14), you may encounter a Protobuf edition validation error (e.g., `Edition UNKNOWN is later than the maximum edition 2023`). If this occurs, the script automatically catches the exception and falls back to a rule-based heuristic evaluation report without crashing.
-*   **ActivityWatch Connection:** The pipeline attempts to connect to ActivityWatch running locally at `http://localhost:5600`. If ActivityWatch is not installed or running, the pipeline will log a warning and proceed without screen-time metrics, leaving those columns null.
+*   **ActivityWatch Connection:** The pipeline attempts to connect to [ActivityWatch](https://github.com/ActivityWatch/activitywatch) running locally at `http://localhost:5600`. If ActivityWatch is not installed or running, the pipeline will log a warning and proceed without screen-time metrics, leaving those columns null.
 
 ---
 
