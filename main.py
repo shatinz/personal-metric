@@ -6,6 +6,12 @@ import sqlite3
 import datetime
 import json
 import logging
+import hashlib
+import gdocs_extractor
+import nlp_analysis
+import dynamic_clustering
+import ai_evaluator
+from config import DB_PATH, GDOCS_CREDENTIALS_FILE, GDOCS_DOCUMENT_ID
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -37,61 +43,67 @@ def get_today_metrics():
 
 def update_onenote_embeddings(db_conn, embedder):
     """
-    Reads notes from .one file, hashes them, and stores new ones with embeddings.
+    Reads notes from Google Docs, hashes them, and stores new ones with embeddings.
     """
-    import onenote_extractor 
-    import config
-    import hashlib
-    
-    notes = onenote_extractor.get_all_notes(config.ONENOTE_PATH)
-    logging.info(f"Found {len(notes)} text fragments in OneNote file.")
-    
     cursor = db_conn.cursor()
-    new_count = 0
     
-    # Collect unique dates affected
-    affected_dates = set()
-    for note in notes:
-        # Parse date from "2026-02-08 10:17:55"
-        try:
-             note_date = note['date'].split(" ")[0]
-        except:
-             note_date = datetime.date.today().isoformat()
-        affected_dates.add(note_date)
-        
-    logging.info(f"Syncing notes for dates: {sorted(list(affected_dates))}")
+    print("Fetching notes from Google Docs...")
+    try:
+        notes_data = gdocs_extractor.extract_notes(GDOCS_CREDENTIALS_FILE, GDOCS_DOCUMENT_ID)
+    except Exception as e:
+        print(f"Failed to fetch Google Docs: {e}")
+        notes_data = []
+
+    print(f"Found {len(notes_data)} entries in Google Docs.")
+
+    # 4. Save to Database
+    new_notes_count = 0
+    synced_dates = []
     
-    # Prune existing notes for these dates (Full Sync Strategy)
-    for d in affected_dates:
-        cursor.execute("DELETE FROM notes WHERE date = ?", (d,))
-    
-    for note in notes:
+    for note in notes_data:
+        note_date = note['date']
         note_text = note['content']
-        try:
-             note_date = note['date'].split(" ")[0]
-        except:
-             # Should match above
-             note_date = datetime.date.today().isoformat()
+        mood = note['mood']
+        energy = note['energy']
+        focus = note['focus']
+        location = note['location']
+
+        # Skip completely empty entries
+        if not note_text and mood is None and energy is None and focus is None:
+            continue
+
+        # Create deterministic ID based on date and text
+        note_hash = hashlib.md5((note_date + note_text).encode('utf-8')).hexdigest()
         
-        # Generate ID based on content hash
-        note_hash = hashlib.md5(note_text.encode('utf-8')).hexdigest()
-            
-        # New note: generate embedding
-        if embedder and note_text:
-            vec = embedder.embed_text(note_text)
-            blob = embedder.serialize_embedding(vec)
-            
-            cursor.execute("INSERT INTO notes (id, date, content, embedding) VALUES (?, ?, ?, ?)",
-                           (note_hash, note_date, note_text, blob))
-            new_count += 1
-            
+        # Check if already exists
+        cursor.execute("SELECT 1 FROM notes WHERE id=?", (note_hash,))
+        if cursor.fetchone():
+            continue # Skip
+
+        # Generate Embedding (we embed the text and metrics together for better semantic search)
+        embedded_string = f"Date: {note_date}. Mood: {mood}. Energy: {energy}. Focus: {focus}. Location: {location}. {note_text}"
+        vec = embedder.embed_text(embedded_string)
+        blob = embedder.serialize_embedding(vec)
+        
+        # Insert
+        cursor.execute("""
+            INSERT INTO notes (id, date, content, embedding, mood, energy, focus, location) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (note_hash, note_date, note_text, blob, mood, energy, focus, location))
+        
+        new_notes_count += 1
+        synced_dates.append(note_date)
+        
     db_conn.commit()
-    return new_count
+    
+    logging.info(f"Syncing notes for dates: {synced_dates}")
+    logging.info(f"Processed {new_notes_count} new notes.")
+    return new_notes_count
 
 def main():
     # 1. Init DB
     db.init_db()
-    conn = sqlite3.connect(db.DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
     
     # 2. Daily Metrics
     try:
@@ -115,8 +127,44 @@ def main():
         logging.info(f"Processed {count} new notes.")
     except Exception as e:
         logging.error(f"Error in embedding process: {e}")
-        
+
     conn.close()
+
+    # 4. NLP Analysis (runs only on new/unanalyzed notes)
+    try:
+        logging.info("Running NLP analysis pipeline...")
+        analyzed = nlp_analysis.run_analysis_pipeline(str(DB_PATH))
+        logging.info(f"NLP analysis complete: {analyzed} entries processed.")
+    except Exception as e:
+        logging.error(f"Error in NLP analysis: {e}")
+
+    # 5. Dynamic Clustering (full re-cluster on each run)
+    try:
+        logging.info("Running dynamic clustering pipeline...")
+        cluster_result = dynamic_clustering.run_clustering_pipeline(str(DB_PATH))
+        if cluster_result.get('status') == 'success':
+            logging.info(
+                f"Clustering complete: "
+                f"HDBSCAN={cluster_result['hdbscan']['n_clusters']} clusters, "
+                f"K-Means K={cluster_result['kmeans']['optimal_k']} "
+                f"(sil={cluster_result['kmeans']['silhouette_score']:.3f})"
+            )
+        else:
+            logging.warning(f"Clustering skipped: {cluster_result.get('reason', 'unknown')}")
+    except Exception as e:
+        logging.error(f"Error in clustering pipeline: {e}")
+
+    # 6. AI Evaluation (optional — comment out if not needed on every run)
+    try:
+        logging.info("Running AI evaluation...")
+        report = ai_evaluator.run_ai_evaluation(str(DB_PATH))
+        report_path = 'latest_evaluation.md'
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write(report)
+        logging.info(f"AI evaluation saved to {report_path}")
+    except Exception as e:
+        logging.error(f"Error in AI evaluation: {e}")
+
     logging.info("Sync complete.")
 
 if __name__ == "__main__":

@@ -1,40 +1,27 @@
 import sqlite3
-import pandas as pd
-from pathlib import Path
 
-DB_PATH = Path("personal_metric.db")
-
-def verify():
-    if not DB_PATH.exists():
-        print("Database not found!")
-        return
-        
-    conn = sqlite3.connect(DB_PATH)
+def check_db():
+    conn = sqlite3.connect("personal_metric.db")
+    cursor = conn.cursor()
     
-    print("--- Daily Metrics ---")
-    try:
-        df = pd.read_sql("SELECT date, computer_active_seconds, window_events FROM daily_metrics", conn)
-        print(df.to_string())
-    except Exception as e:
-        print(f"Error reading metrics: {e}")
-        
-    print("\n--- Notes Summary ---")
-    try:
-        # Group by date
-        df_notes = pd.read_sql("SELECT date, COUNT(*) as count FROM notes GROUP BY date", conn)
-        if df_notes.empty:
-            print("No notes found.")
-        else:
-            print(df_notes.to_string())
-            
-        print("\n--- Sample Notes ---")
-        df_sample = pd.read_sql("SELECT date, substr(content, 1, 50) as snippet from notes LIMIT 10", conn)
-        print(df_sample.to_string())
-        
-    except Exception as e:
-        print(f"Error reading notes: {e}")
-        
+    cursor.execute("SELECT count(*) FROM notes")
+    count = cursor.fetchone()[0]
+    print(f"Total notes in database: {count}")
+    
+    cursor.execute("SELECT date FROM notes ORDER BY date LIMIT 1")
+    first = cursor.fetchone()
+    print(f"First note date: {first[0] if first else 'N/A'}")
+
+    cursor.execute("SELECT date FROM notes ORDER BY date DESC LIMIT 1")
+    last = cursor.fetchone()
+    print(f"Last note date: {last[0] if last else 'N/A'}")
+    
+    # Check for the specific date the user wanted before
+    cursor.execute("SELECT date FROM notes WHERE date = '2026-02-01'")
+    feb1 = cursor.fetchone()
+    print(f"Found Feb 1st note: {'Yes' if feb1 else 'No'}")
+    
     conn.close()
 
-if __name__ == "__main__":
-    verify()
+if __name__ == '__main__':
+    check_db()

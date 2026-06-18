@@ -3,3 +3,18 @@ pandas
 pywin32
 sentence-transformers
 numpy
+scipy
+# NLP
+spacy
+nltk
+transformers
+torch
+# Clustering
+scikit-learn
+hdbscan
+umap-learn
+# Dashboard
+streamlit
+plotly
+# AI Evaluation
+google-antigravity
