@@ -333,7 +333,8 @@ def load_raw_embeddings_and_metrics():
                     'emotion_diversity': r[12], 'creativity_score': r[13], 'verb_ratio': r[14],
                     'noun_ratio': r[15], 'adjective_ratio': r[16], 'first_person_pronoun_ratio': r[17],
                     'grammatical_correctness_score': r[18], 'hapax_legomena_ratio': r[19],
-                    'mood': r[20], 'energy': r[21], 'focus': r[22]
+                    'mood': r[20], 'energy': r[21], 'focus': r[22],
+                    'content': r[23] or ''
                 })
                 contents.append((r[23] or '')[:100] + '...')
             except Exception:
@@ -444,6 +445,190 @@ def run_in_memory_clustering(matrix, reduced_2d, algo_choice, space_choice, kmea
             
         n_clusters = len(set(labels) - {-1})
         return labels, n_clusters, round(float(score), 4)
+
+
+def render_two_way_cluster_explorer(explorer_df, cluster_col):
+    st.markdown('<div class="section-header">🧭 Cluster-Diary Explorer (Two-Way)</div>', unsafe_allow_html=True)
+    st.markdown("Explore your clusters from both directions: analyze the portion of themes on a given date, or find all entries belonging to a specific cluster.")
+    
+    if explorer_df.empty:
+        st.info("No data available to explore.")
+        return
+        
+    explorer_df = explorer_df.copy()
+    explorer_df['date_dt'] = pd.to_datetime(explorer_df['date'])
+    
+    def clean_label(c):
+        if isinstance(c, (int, float, np.integer)):
+            return f"Cluster {int(c)}" if c != -1 else "Noise/Unclustered"
+        return str(c)
+        
+    tab_date_to_cluster, tab_cluster_to_diary = st.tabs([
+        "📅 Date ➡️ Clusters (Portions)", 
+        "🔮 Cluster ➡️ Diaries (Browse)"
+    ])
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # TAB 1: Date -> Clusters
+    # ─────────────────────────────────────────────────────────────────────────
+    with tab_date_to_cluster:
+        st.markdown("##### 🔍 Portions of Each Cluster on a Selected Date")
+        available_dates = sorted(explorer_df['date_dt'].dt.date.unique())
+        if not available_dates:
+            st.info("No dates with entries found.")
+        else:
+            col_sel1, col_sel2 = st.columns([2, 1])
+            with col_sel1:
+                selected_date = st.selectbox(
+                    "Select Date to Inspect", 
+                    available_dates, 
+                    index=len(available_dates) - 1,
+                    format_func=lambda x: x.strftime('%B %d, %Y'),
+                    key="explorer_date_sel"
+                )
+            with col_sel2:
+                window_days = st.slider(
+                    "Aggregation Window (Days)", 1, 30, 7, 
+                    help="Number of days around the selected date to compute the cluster portions. Useful for aggregating daily logs.",
+                    key="explorer_window_sel"
+                )
+                
+            half_window = window_days // 2
+            start_dt = selected_date - datetime.timedelta(days=half_window)
+            end_dt = selected_date + datetime.timedelta(days=half_window)
+            
+            window_df = explorer_df[(explorer_df['date_dt'].dt.date >= start_dt) & (explorer_df['date_dt'].dt.date <= end_dt)]
+            
+            if window_df.empty:
+                st.warning(f"No entries found in the {window_days}-day window around {selected_date.strftime('%B %d, %Y')}.")
+            else:
+                counts = window_df[cluster_col].value_counts()
+                total_in_window = len(window_df)
+                
+                col_chart, col_entries = st.columns([2, 3])
+                
+                with col_chart:
+                    st.markdown(f"**Cluster Mixture ({window_days}-day window)**")
+                    st.caption(f"From {start_dt.strftime('%b %d')} to {end_dt.strftime('%b %d')} · {total_in_window} entries")
+                    
+                    portions_df = pd.DataFrame({
+                        'Cluster': counts.index,
+                        'Count': counts.values,
+                        'Percentage': (counts.values / total_in_window) * 100
+                    })
+                    portions_df['Cluster Name'] = portions_df['Cluster'].apply(clean_label)
+                    
+                    fig = px.pie(
+                        portions_df,
+                        names='Cluster Name',
+                        values='Count',
+                        color='Cluster Name',
+                        color_discrete_sequence=CLUSTER_COLORS,
+                        hole=0.4,
+                        hover_data=['Percentage']
+                    )
+                    fig.update_traces(textinfo='percent+label', marker=dict(line=dict(color='rgba(255,255,255,0.2)', width=1)))
+                    fig.update_layout(showlegend=False, height=250, margin=dict(l=10, r=10, t=10, b=10))
+                    apply_theme(fig)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                with col_entries:
+                    st.markdown(f"**Entries in Window ({total_in_window})**")
+                    window_df_sorted = window_df.sort_values('date_dt', ascending=False)
+                    
+                    for idx, row in window_df_sorted.iterrows():
+                        c_label = clean_label(row[cluster_col])
+                        preview = row.get('preview', '')
+                        full_content = row.get('content', '')
+                        if not preview and full_content:
+                            preview = full_content[:100] + '...'
+                        elif not preview:
+                            preview = "No text available."
+                            
+                        sentiment = row.get('sentiment_polarity', row.get('sentiment', 0.0))
+                        words = row.get('word_count', 0)
+                        date_str = row['date_dt'].strftime('%b %d, %Y')
+                        
+                        with st.container():
+                            st.markdown(f"""
+                            <div style="font-size:0.85rem; color:rgba(255,255,255,0.6); margin-top:12px; display:flex; justify-content:space-between;">
+                                <span>📅 <b>{date_str}</b></span>
+                                <span>🏷️ <span style="color:#a78bfa; font-weight:600;">{c_label}</span></span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            with st.expander(preview, expanded=False):
+                                st.markdown(f"<div style='font-size:0.95rem; line-height:1.5; color:rgba(255,255,255,0.9); padding: 8px 0;'>{full_content}</div>", unsafe_allow_html=True)
+                                st.caption(f"📏 {words} words · 😊 Sentiment: {sentiment:.2f}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TAB 2: Cluster -> Diaries
+    # ─────────────────────────────────────────────────────────────────────────
+    with tab_cluster_to_diary:
+        st.markdown("##### 🔮 Diaries Associated with a Specific Cluster")
+        
+        raw_clusters = sorted(explorer_df[cluster_col].unique())
+        cluster_options = {clean_label(c): c for c in raw_clusters}
+        
+        selected_option = st.selectbox(
+            "Select Cluster", 
+            list(cluster_options.keys()),
+            key="explorer_cluster_sel"
+        )
+        target_cluster = cluster_options[selected_option]
+        
+        cluster_df = explorer_df[explorer_df[cluster_col] == target_cluster]
+        n_cluster_entries = len(cluster_df)
+        
+        if cluster_df.empty:
+            st.info("No entries found in this cluster.")
+        else:
+            col_sort1, col_sort2 = st.columns([2, 1])
+            with col_sort1:
+                avg_sentiment = cluster_df['sentiment_polarity'].mean() if 'sentiment_polarity' in cluster_df.columns else (cluster_df['sentiment'].mean() if 'sentiment' in cluster_df.columns else 0.0)
+                avg_words = cluster_df['word_count'].mean()
+                st.markdown(f"**Cluster Profile:** `{n_cluster_entries}` entries · Avg sentiment: `{avg_sentiment:.2f}` · Avg length: `{avg_words:.0f}` words")
+            with col_sort2:
+                sort_by = st.selectbox(
+                    "Sort Entries By",
+                    ["Date (Recent First)", "Date (Oldest First)", "Word Count (High to Low)", "Sentiment (Most Positive)", "Sentiment (Most Negative)"],
+                    key="explorer_cluster_sort"
+                )
+                
+            if "Date (Recent First)" in sort_by:
+                cluster_df_sorted = cluster_df.sort_values('date_dt', ascending=False)
+            elif "Date (Oldest First)" in sort_by:
+                cluster_df_sorted = cluster_df.sort_values('date_dt', ascending=True)
+            elif "Word Count (High to Low)" in sort_by:
+                cluster_df_sorted = cluster_df.sort_values('word_count', ascending=False)
+            elif "Sentiment (Most Positive)" in sort_by:
+                col_name = 'sentiment_polarity' if 'sentiment_polarity' in cluster_df.columns else 'sentiment'
+                cluster_df_sorted = cluster_df.sort_values(col_name, ascending=False)
+            elif "Sentiment (Most Negative)" in sort_by:
+                col_name = 'sentiment_polarity' if 'sentiment_polarity' in cluster_df.columns else 'sentiment'
+                cluster_df_sorted = cluster_df.sort_values(col_name, ascending=True)
+                
+            st.markdown("---")
+            
+            for idx, row in cluster_df_sorted.iterrows():
+                preview = row.get('preview', '')
+                full_content = row.get('content', '')
+                if not preview and full_content:
+                    preview = full_content[:100] + '...'
+                elif not preview:
+                    preview = "No text available."
+                    
+                sentiment = row.get('sentiment_polarity', row.get('sentiment', 0.0))
+                words = row.get('word_count', 0)
+                date_str = row['date_dt'].strftime('%b %d, %Y')
+                
+                with st.container():
+                    st.markdown(f"""
+                    <div style="font-size:0.85rem; color:rgba(255,255,255,0.6); margin-top:12px;">
+                        📅 <b>{date_str}</b> · 📏 {words} words · 😊 Sentiment: {sentiment:.2f}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    with st.expander(preview, expanded=False):
+                        st.markdown(f"<div style='font-size:0.95rem; line-height:1.5; color:rgba(255,255,255,0.9); padding: 8px 0;'>{full_content}</div>", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -918,6 +1103,9 @@ if clustering_mode == "Saved Database Runs (Static) 💾":
                 st.info("No strong correlations found yet.")
     else:
         st.info("Run clustering to see metric-cluster correlations.")
+        
+    # Daily Explorer (Static)
+    render_two_way_cluster_explorer(df, cluster_col_db)
 
 else:
     # 🎮 Interactive Clustering Playground 🎮
@@ -1079,7 +1267,8 @@ else:
             'cluster': str_labels,
             'sentiment': metrics_df['sentiment_polarity'],
             'word_count': metrics_df['word_count'],
-            'preview': metrics_df['preview']
+            'preview': metrics_df['preview'],
+            'content': metrics_df['content']
         })
         
         # Plot Scatter
@@ -1178,6 +1367,9 @@ else:
                 st.dataframe(pd.DataFrame(summary_records).set_index('Cluster ID'))
             else:
                 st.info("No summaries available.")
+                
+        # 7. Daily Explorer (Interactive)
+        render_two_way_cluster_explorer(playground_df, 'cluster')
                 
     else:
         st.error("Could not run dimension reduction. Ensure notes have embeddings.")

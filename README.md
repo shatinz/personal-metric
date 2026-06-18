@@ -44,6 +44,14 @@ Using vector semantics, natural language processing (NLP), density-based cluster
 *   **Correlation Heatmap:** Statistical overview of the relationship between your digital behaviors (apps, screen time) and emotional themes.
 *   **AI Evaluation Panel:** Run or display a structured, automated report evaluating your pipeline's validity and offering custom self-development advice.
 
+#### 📊 Dashboard Showcase
+
+<p align="center">
+  <img src="dashboard_overview.png" alt="Dashboard Overview Panel" width="48%"/>
+  &nbsp;
+  <img src="dashboard_clustering.png" alt="Dashboard Semantic Clustering" width="48%"/>
+</p>
+
 ---
 
 ## 🛠️ System Architecture
